@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <title>IoT Monitoring Dashboard – Pro Version</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Bootstrap -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"/>
+
+  <!-- jQuery & DataTables -->
+  <script src="https://code.jquery.com/jquery-3.5.1.js"></script>
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+  <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- ApexCharts -->
+  <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+
+  <!-- Socket.IO -->
+  <script src="/socket.io/socket.io.js"></script>
+
+  <style>
+    body {
+      background: #0f172a;
+      color: #e5e7eb;
+      font-family: 'Segoe UI', sans-serif;
+    }
+    .navbar-custom {
+      background: #1e293b;
+      border-bottom: 2px solid #334155;
+    }
+    .nav-link {
+      color: #cbd5e1 !important;
+      font-weight: 500;
+      padding: 12px 20px;
+      transition: 0.2s;
+    }
+    .nav-link:hover {
+      color: #38bdf8 !important;
+    }
+    .nav-link.active {
+      color: #38bdf8 !important;
+      border-bottom: 3px solid #38bdf8;
+    }
+    .tab-content-section {
+      display: none;
+      animation: fadeIn 0.4s;
+    }
+    .tab-active {
+      display: block;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(5px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .card {
+      background: #111827;
+      border: 1px solid #1f2937;
+      border-radius: 16px;
+      box-shadow: 0 4px 15px #00000030;
+    }
+    table {
+      color: white !important;
+    }
+    .section-title {
+      font-size: 1.3rem;
+      font-weight: bold;
+      margin-top: 25px;
+      margin-bottom: 15px;
+      color: #38bdf8;
+    }
+    .btn-delete {
+      padding: 4px 10px;
+      font-size: 12px;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+
+<body>
+
+<nav class="navbar navbar-expand-lg navbar-custom mb-4">
+  <div class="container-fluid">
+    <a class="navbar-brand text-light fw-bold">🌐 IoT Monitoring</a>
+    <ul class="navbar-nav ms-auto">
+      <li class="nav-item"><a class="nav-link active" data-tab="dashboard">Dashboard</a></li>
+      <li class="nav-item"><a class="nav-link" data-tab="devices">Devices</a></li>
+      <li class="nav-item"><a class="nav-link" data-tab="sensors">Sensors</a></li>
+      <li class="nav-item"><a class="nav-link" data-tab="history">History</a></li>
+    </ul>
+  </div>
+</nav>
+
+<div class="container">
+<!-- ====================================================== -->
+<!-- TAB 1: REALTIME DASHBOARD -->
+<!-- ====================================================== -->
+<div id="tab-dashboard" class="tab-content-section tab-active">
+
+  <h3 class="section-title">🔥 Realtime Temperature & Humidity</h3>
+
+  <div class="row g-3 mb-4">
+    <div class="col-md-6">
+      <div class="card p-3 text-center">
+        <h5>Nhiệt độ</h5>
+        <div class="fs-1 fw-bold" id="tempValue">-- °C</div>
+        <div id="tempGauge"></div>
+      </div>
+    </div>
+
+    <div class="col-md-6">
+      <div class="card p-3 text-center">
+        <h5>Độ ẩm</h5>
+        <div class="fs-1 fw-bold" id="humValue">-- %</div>
+        <div id="humGauge"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card p-3 mb-4">
+    <canvas id="historyChart" height="90"></canvas>
+  </div>
+</div>
+
+
+<!-- ====================================================== -->
+<!-- TAB 2: DEVICES -->
+<!-- ====================================================== -->
+<div id="tab-devices" class="tab-content-section">
+  <h3 class="section-title">📡 Danh sách thiết bị</h3>
+
+  <div class="card p-3">
+    <table id="deviceTable" class="table table-dark table-striped">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Tên thiết bị</th>
+          <th>Trạng thái</th>
+          <th>Nhiệt độ</th>
+          <th>Độ ẩm</th>
+          <th>Cập nhật</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+
+<!-- ====================================================== -->
+<!-- TAB 3: SENSORS -->
+<!-- ====================================================== -->
+<div id="tab-sensors" class="tab-content-section">
+  <h3 class="section-title">🔧 Sensors</h3>
+
+  <div class="card p-3">
+    <table id="sensorTable" class="table table-dark table-striped">
+      <thead>
+        <tr>
+          <th>SensorID</th>
+          <th>Device</th>
+          <th>Type</th>
+          <th>Unit</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+
+<!-- ====================================================== -->
+<!-- TAB 4: HISTORY -->
+<!-- ====================================================== -->
+<div id="tab-history" class="tab-content-section">
+  <h3 class="section-title">📜 Lịch sử dữ liệu</h3>
+
+  <div class="card p-3">
+
+    <!-- DELETE ALL BUTTON -->
+    <button id="deleteAllBtn" class="btn btn-danger mb-3">
+      🗑 XÓA TOÀN BỘ LỊCH SỬ
+    </button>
+
+    <!-- FILTER FORM -->
+    <form class="row g-3 mb-3" id="filterForm">
+      <div class="col-md-4">
+        <label>Từ thời điểm</label>
+        <input type="datetime-local" id="start" class="form-control">
+      </div>
+      <div class="col-md-4">
+        <label>Đến thời điểm</label>
+        <input type="datetime-local" id="end" class="form-control">
+      </div>
+      <div class="col-md-4 d-flex align-items-end">
+        <button class="btn btn-info me-2" type="submit">Lọc</button>
+        <button class="btn btn-secondary" type="button" id="btnAll">Tất cả</button>
+      </div>
+    </form>
+
+    <!-- HISTORY TABLE -->
+    <table id="historyTable" class="display table table-striped">
+      <thead>
+        <tr>
+          <th>DataID</th>
+          <th>SensorID</th>
+          <th>Value</th>
+          <th>Timestamp</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+  </div>
+</div>
+
+</div> <!-- end container -->
+<!-- ====================================================== -->
+<!-- JAVASCRIPT CHO TẤT CẢ TAB -->
+<!-- ====================================================== -->
+<script>
+/* =============================================================
+   TAB MENU CLICK
+============================================================= */
+const navLinks = document.querySelectorAll(".nav-link");
+navLinks.forEach(link => {
+  link.addEventListener("click", () => {
+    document.querySelector(".nav-link.active").classList.remove("active");
+    link.classList.add("active");
+
+    document.querySelectorAll(".tab-content-section").forEach(tab => tab.classList.remove("tab-active"));
+    document.getElementById("tab-" + link.dataset.tab).classList.add("tab-active");
+  });
+});
+
+
+/* =============================================================
+   1. LOAD DEVICES
+============================================================= */
+async function loadDevices() {
+  try {
+    const res = await fetch("/api/devices");
+    const rows = await res.json();
+
+    const tb = document.querySelector("#deviceTable tbody");
+    tb.innerHTML = "";
+
+    rows.forEach(d => {
+      tb.innerHTML += `
+        <tr>
+          <td>${d.DeviceID}</td>
+          <td>${d.Name}</td>
+          <td>${d.Status ? "🟢 Online" : "🔴 Offline"}</td>
+          <td>${d.Temperature ?? "--"}</td>
+          <td>${d.Humidity ?? "--"}</td>
+          <td>${d.UpdatedAt ? new Date(d.UpdatedAt).toLocaleString("vi-VN") : "--"}</td>
+        </tr>
+      `;
+    });
+  } catch (err) {
+    console.error("Lỗi loadDevices:", err);
+  }
+}
+
+
+/* =============================================================
+   2. LOAD SENSORS
+============================================================= */
+async function loadSensors() {
+  try {
+    const res = await fetch("/api/sensors");
+    const rows = await res.json();
+
+    const tb = document.querySelector("#sensorTable tbody");
+    tb.innerHTML = "";
+
+    rows.forEach(s => {
+      tb.innerHTML += `
+        <tr>
+          <td>${s.SensorID}</td>
+          <td>${s.DeviceName}</td>
+          <td>${s.Type}</td>
+          <td>${s.Unit}</td>
+        </tr>
+      `;
+    });
+  } catch (err) {
+    console.error("Lỗi loadSensors:", err);
+  }
+}
+
+
+/* =============================================================
+   3. REALTIME (Socket.IO + Gauge + Line Chart)
+============================================================= */
+const tempEl = document.getElementById("tempValue");
+const humEl = document.getElementById("humValue");
+
+const tempGauge = new ApexCharts(document.querySelector("#tempGauge"), {
+  chart:{ type:"radialBar", height:180 },
+  series:[0],
+  labels:["°C"]
+});
+tempGauge.render();
+
+const humGauge = new ApexCharts(document.querySelector("#humGauge"), {
+  chart:{ type:"radialBar", height:180 },
+  series:[0],
+  labels:["%"]
+});
+humGauge.render();
+
+const ctx = document.getElementById("historyChart").getContext("2d");
+const historyChart = new Chart(ctx, {
+  type:"line",
+  data:{
+    labels:[],
+    datasets:[
+      { label:"Temp (°C)", data:[], borderColor:"red", tension:0.2 },
+      { label:"Hum (%)", data:[], borderColor:"cyan", tension:0.2 }
+    ]
+  },
+  options:{
+    responsive:true,
+    plugins:{ legend:{ labels:{ color:"#e5e7eb" } } },
+    scales:{
+      x:{ ticks:{ color:"#9ca3af" } },
+      y:{ ticks:{ color:"#9ca3af" } }
+    }
+  }
+});
+
+const socket = io();
+socket.on("sensorData", payload => {
+  const {temperature, humidity, timestamp} = payload;
+
+  tempEl.textContent = temperature.toFixed(1) + " °C";
+  humEl.textContent = humidity.toFixed(1) + " %";
+
+  tempGauge.updateSeries([temperature]);
+  humGauge.updateSeries([humidity]);
+
+  const label = new Date(timestamp).toLocaleTimeString("vi-VN");
+
+  historyChart.data.labels.push(label);
+  historyChart.data.datasets[0].data.push(temperature);
+  historyChart.data.datasets[1].data.push(humidity);
+
+  if(historyChart.data.labels.length > 40){
+    historyChart.data.labels.shift();
+    historyChart.data.datasets[0].data.shift();
+    historyChart.data.datasets[1].data.shift();
+  }
+
+  historyChart.update();
+});
+
+
+/* =============================================================
+   4. HISTORY TABLE + DELETE TỪNG DÒNG + DELETE ALL
+============================================================= */
+let dt = null;
+
+function renderHistory(rows){
+  // format thời gian
+  rows.forEach(r => {
+    r._t = new Date(r.Timestamp).toLocaleString("vi-VN");
+  });
+
+  if(!dt){
+    dt = $('#historyTable').DataTable({
+      data:rows,
+      columns:[
+        {data:"DataID"},
+        {data:"SensorID"},
+        {data:"Value"},
+        {data:"_t"},
+        {
+          data: null,
+          orderable: false,
+          searchable: false,
+          render: function (data) {
+            return `
+              <button class="btn btn-sm btn-danger btn-delete" data-id="${data.DataID}">
+                DELETE
+              </button>
+            `;
+          }
+        }
+      ],
+      pageLength:20
+    });
+
+    // Gán sự kiện DELETE từng dòng (delegated)
+    $('#historyTable tbody').on('click', '.btn-delete', async function () {
+      const id = this.dataset.id;
+      if (!confirm(`⚠ Bạn có chắc muốn xoá DataID = ${id}?`)) return;
+
+      try {
+        const res = await fetch(`/api/sensor-data/${id}`, {
+          method: "DELETE"
+        });
+        const json = await res.json();
+        alert(json.message || "Đã xoá!");
+
+        loadHistory(); // reload lại bảng
+      } catch (err) {
+        console.error("Lỗi DELETE 1 dòng:", err);
+        alert("Lỗi xoá dữ liệu!");
+      }
+    });
+
+  } else {
+    dt.clear();
+    dt.rows.add(rows);
+    dt.draw();
+  }
+}
+
+async function loadHistory(){
+  try {
+    const res = await fetch("/api/sensor-data");
+    const rows = await res.json();
+    renderHistory(rows);
+  } catch (err) {
+    console.error("Lỗi loadHistory:", err);
+  }
+}
+
+// Nút "Tất cả" → loadHistory
+document.getElementById("btnAll").addEventListener("click", loadHistory);
+
+// Lọc theo khoảng thời gian
+document.getElementById("filterForm").addEventListener("submit", async(e)=>{
+  e.preventDefault();
+  let s = document.getElementById("start").value;
+  let e2 = document.getElementById("end").value;
+  if(!s || !e2) {
+    alert("Vui lòng chọn cả thời điểm bắt đầu và kết thúc!");
+    return;
+  }
+
+  s = s.replace("T"," ") + ":00";
+  e2 = e2.replace("T"," ") + ":00";
+
+  try {
+    const res = await fetch(`/api/sensor-data/filter?start=${encodeURIComponent(s)}&end=${encodeURIComponent(e2)}`);
+    const rows = await res.json();
+    renderHistory(rows);
+  } catch (err) {
+    console.error("Lỗi filter:", err);
+  }
+});
+
+// Nút DELETE ALL HISTORY
+document.getElementById("deleteAllBtn").addEventListener("click", async () => {
+  if (!confirm("⚠ Bạn có chắc muốn XOÁ TOÀN BỘ LỊCH SỬ? Hành động này KHÔNG THỂ hoàn tác!")) return;
+
+  try {
+    const res = await fetch("/api/sensor-data", {
+      method: "DELETE"
+    });
+    const json = await res.json();
+    alert(json.message || "Đã xoá toàn bộ lịch sử!");
+
+    loadHistory();
+  } catch (err) {
+    console.error("Lỗi DELETE ALL:", err);
+    alert("Lỗi xoá toàn bộ lịch sử!");
+  }
+});
+
+
+/* =============================================================
+   LOAD BAN ĐẦU
+============================================================= */
+loadDevices();
+loadSensors();
+loadHistory();
+</script>
+
+</body>
+</html>
